@@ -210,11 +210,17 @@
 
     function loadMessages() {
       fetch('/api/messages')
-        .then(response => response.json())
+        .then(response => {
+          if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+          return response.json();
+        })
         .then(messages => {
           const messageList = document.getElementById('messageList');
           messageList.innerHTML = '';
-          if (messages.length === 0) {
+          if (!Array.isArray(messages)) {
+            console.warn('Messages is not an array:', messages);
+            messageList.innerHTML = '<li>Error loading messages or no data available</li>';
+          } else if (messages.length === 0) {
             messageList.innerHTML = '<li>No messages yet.</li>';
           } else {
             messages.forEach(message => {
@@ -226,7 +232,7 @@
               const li = document.createElement('li');
               li.innerHTML = `<span class="message-header">From: ${author}</span><br>${message.text}<br><span class="message-time">Posted on: ${date}</span>`;
               if (message.image) {
-                li.innerHTML += `<br><img src="${message.image}" alt="Guest image" style="max-width: 100px; border-radius: 50%;">`;
+                li.innerHTML += `<br><img src="/${message.image}" alt="Guest image" style="max-width: 100px; border-radius: 50%;">`;
               }
               const deleteBtn = document.createElement('button');
               deleteBtn.textContent = 'Delete';
@@ -244,31 +250,33 @@
             });
           }
         })
-        .catch(err => console.error('Error fetching messages:', err));
+        .catch(err => {
+          console.error('Error fetching messages:', err);
+          document.getElementById('messageList').innerHTML = '<li>Error loading messages</li>';
+        });
     }
 
     async function deleteMessage(id) {
       if (confirm('Are you sure you want to delete this message?')) {
-        const response = await fetch(`/api/messages/${id}`, {
-          method: 'DELETE'
-        });
+        const response = await fetch(`/api/messages/${id}`, { method: 'DELETE' });
         if (response.ok) {
           alert('Message deleted successfully!');
           loadMessages();
         } else {
-          alert('Failed to delete message.');
-          console.error('Error:', await response.json());
+          const errorData = await response.json();
+          alert(`Failed to delete message: ${errorData.error || 'Unknown error'}`);
+          console.error('Delete error:', errorData);
         }
       }
     }
 
     function editMessage(message) {
       currentEditId = message._id.toString();
-      document.getElementById('editMessageInput').value = message.text;
+      document.getElementById('editMessageInput').value = message.text || '';
       document.getElementById('editAuthorInput').value = message.author || '';
       const editPreview = document.getElementById('editImagePreview');
       if (message.image) {
-        editPreview.src = message.image;
+        editPreview.src = `/${message.image}`;
         editPreview.style.display = 'block';
       } else {
         editPreview.style.display = 'none';
@@ -299,8 +307,8 @@
       const fileInput = document.getElementById('editImageInput');
       if (fileInput.files[0]) {
         formData.append('image', fileInput.files[0]);
-      } else {
-        formData.append('image', document.getElementById('editImagePreview').src.split('/').pop()); // Keep old image
+      } else if (document.getElementById('editImagePreview').src) {
+        formData.append('image', document.getElementById('editImagePreview').src.split('/').pop());
       }
 
       const response = await fetch(`/api/messages/${currentEditId}`, {
@@ -316,8 +324,9 @@
         document.getElementById('editImagePreview').style.display = 'none';
         loadMessages();
       } else {
-        alert('Failed to update message. Check the console for details.');
-        console.error('Error:', await response.json());
+        const errorData = await response.json();
+        alert(`Failed to update message: ${errorData.error || 'Unknown error'}`);
+        console.error('Update error:', errorData);
       }
     });
 
@@ -351,8 +360,9 @@
         document.getElementById('imagePreview').style.display = 'none';
         loadMessages();
       } else {
-        alert('Failed to add message. Check the console for details.');
-        console.error('Error:', await response.json());
+        const errorData = await response.json();
+        alert(`Failed to add message: ${errorData.error || 'Unknown error'}`);
+        console.error('Add error:', errorData);
       }
     });
 
