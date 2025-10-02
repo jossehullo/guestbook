@@ -1,39 +1,49 @@
+require('dotenv').config();
 const express = require('express');
 const { MongoClient, ObjectId } = require('mongodb');
 const multer = require('multer');
+const cors = require('cors');
+
 const app = express();
-const port = 3001;
+const port = process.env.PORT || 3001;
 
-// Set up multer for file uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'public/');
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + '-' + file.originalname); // Unique filename with timestamp
-  }
-});
-const upload = multer({ storage: storage });
-
+// Middleware
+app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-const url = 'mongodb://localhost:27017';
-const dbName = 'myWebsiteDB';
+// Multer with memory storage for Render
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+
+// MongoDB Atlas connection
+const url = process.env.MONGO_URI || 'mongodb+srv://josephhullo_db_user:<your_actual_password>@cluster0.rw6gtlj.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+const dbName = 'josephhullo';
 let db;
 
-MongoClient.connect(url)
+MongoClient.connect(url, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(client => {
-    console.log('Connected to MongoDB');
+    console.log('✅ Connected to MongoDB Atlas at:', url);
     db = client.db(dbName);
   })
-  .catch(err => console.error('Failed to connect to MongoDB:', err));
+  .catch(err => {
+    console.error('❌ MongoDB Connection Error:', err.message, err.stack);
+    // Keep the process running to log further errors
+  });
 
+// Default route
+app.get('/', (req, res) => {
+  res.send('🚀 Guestbook API is running!');
+});
+
+// POST - Add a message
 app.post('/api/messages', upload.single('image'), async (req, res) => {
   try {
+    console.log('Request body:', req.body, 'File:', req.file);
+    if (!db) throw new Error('Database connection not established');
     const { text, author } = req.body;
     const timestamp = new Date().toISOString();
-    let image = req.file ? req.file.filename : null;
+    let image = req.file ? `${Date.now()}-${req.file.originalname}` : null;
 
     if (!text || !author) {
       return res.status(400).json({ error: 'Text and author are required' });
@@ -41,21 +51,28 @@ app.post('/api/messages', upload.single('image'), async (req, res) => {
 
     const message = { text, author, timestamp, image };
     const result = await db.collection('messages').insertOne(message);
+    console.log('Message inserted:', result);
     res.status(201).json(result);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to add message' });
+    console.error('Insert error:', err.message, err.stack);
+    res.status(500).json({ error: `Failed to add message: ${err.message}` });
   }
 });
 
+// GET - Fetch all messages
 app.get('/api/messages', async (req, res) => {
   try {
+    if (!db) throw new Error('Database connection not established');
     const messages = await db.collection('messages').find({}).toArray();
+    console.log('Fetched messages:', messages);
     res.json(messages);
   } catch (err) {
+    console.error('Fetch error:', err);
     res.status(500).json({ error: 'Failed to fetch messages' });
   }
 });
 
+// DELETE - Remove a message
 app.delete('/api/messages/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -73,15 +90,17 @@ app.delete('/api/messages/:id', async (req, res) => {
   }
 });
 
+// PUT - Update a message
 app.put('/api/messages/:id', upload.single('image'), async (req, res) => {
   try {
     const { id } = req.params;
     if (!ObjectId.isValid(id)) {
       return res.status(400).json({ error: 'Invalid message ID' });
     }
+    if (!db) throw new Error('Database connection not established');
     const { text, author } = req.body;
     const timestamp = new Date().toISOString();
-    let image = req.file ? req.file.filename : req.body.image; // Keep old image if no new upload
+    let image = req.file ? `${Date.now()}-${req.file.originalname}` : req.body.image;
 
     if (!text || !author) {
       return res.status(400).json({ error: 'Text and author are required' });
@@ -105,5 +124,5 @@ app.put('/api/messages/:id', upload.single('image'), async (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
+  console.log(`🚀 Server running on port ${port}`);
 });
