@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Guestbook</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      margin: 0;
+      padding: 10px;
+      background: linear-gradient(135deg, #f0f0f0, #d9e4f5);
+      min-height: 100vh;
+    }
+    h1 {
+      color: #333;
+      text-align: center;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      text-align: center;
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 15px;
+      text-align: left;
+    }
+    li {
+      margin: 10px 0;
+      padding: 15px;
+      background: #fff;
+      border-radius: 8px;
+      border-left: 5px solid #4CAF50;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      animation: fadeIn 0.5s ease-in;
+      position: relative;
+    }
+    li:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    }
+    .message-header {
+      font-weight: bold;
+      color: #333;
+      font-size: 1.1em;
+    }
+    .message-time {
+      font-size: 0.85em;
+      color: #777;
+      display: block;
+      margin-top: 5px;
+    }
+    .delete-btn, .edit-btn {
+      position: absolute;
+      top: 10px;
+      padding: 5px 10px;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 0.8em;
+    }
+    .delete-btn {
+      right: 10px;
+      background: #ff4444;
+      color: white;
+    }
+    .delete-btn:hover {
+      background: #cc0000;
+    }
+    .edit-btn {
+      right: 60px;
+      background: #2196F3;
+      color: white;
+    }
+    .edit-btn:hover {
+      background: #1976D2;
+    }
+    form {
+      margin: 20px 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    input[type="text"], input[type="file"] {
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      width: 80%;
+      max-width: 300px;
+      box-sizing: border-box;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      background: linear-gradient(135deg, #4CAF50, #45a049);
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    button:hover {
+      background: linear-gradient(135deg, #45a049, #3d8b40);
+    }
+    #imagePreview, #editImagePreview {
+      max-width: 100px;
+      max-height: 100px;
+      border-radius: 50%;
+      margin-top: 10px;
+      display: none;
+      object-fit: cover;
+      width: 100px;
+      height: 100px;
+    }
+    #editModal {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      z-index: 1000;
+      width: 90%;
+      max-width: 400px;
+    }
+    #editModal.active { display: block; }
+    #overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 999;
+    }
+    #overlay.active { display: block; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media (max-width: 600px) {
+      .container { padding: 15px; }
+      input[type="text"], input[type="file"], button { width: 100%; }
+      ul { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img src="banner.jpg" alt="Welcome Banner" class="banner" style="width: 100%; max-height: 200px; object-fit: cover; border-radius: 10px;">
+    <h1>My Guestbook</h1>
+    <form id="messageForm" enctype="multipart/form-data">
+      <input type="text" id="messageInput" placeholder="Leave a message" required>
+      <input type="text" id="authorInput" placeholder="Your name" required>
+      <input type="file" id="imageInput" accept="image/*" name="image">
+      <img id="imagePreview" alt="Preview">
+      <button type="submit">Add Message</button>
+    </form>
+    <div id="overlay"></div>
+    <div id="editModal">
+      <form id="editForm" enctype="multipart/form-data">
+        <input type="text" id="editMessageInput" placeholder="Edit message" required>
+        <input type="text" id="editAuthorInput" placeholder="Edit name" required>
+        <input type="file" id="editImageInput" accept="image/*" name="image">
+        <img id="editImagePreview" alt="Edit Preview">
+        <button type="submit">Save Edit</button>
+        <button type="button" id="cancelEdit">Cancel</button>
+      </form>
+    </div>
+    <ul id="messageList"></ul>
+  </div>
+
+  <script>
+    // Image preview functionality
+    function setupPreview(inputId, previewId) {
+      document.getElementById(inputId).addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        const preview = document.getElementById(previewId);
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            preview.src = e.target.result;
+            preview.style.display = 'block';
+          };
+          reader.readAsDataURL(file);
+        } else {
+          preview.style.display = 'none';
+        }
+      });
+    }
+    setupPreview('imageInput', 'imagePreview');
+    setupPreview('editImageInput', 'editImagePreview');
+
+    let currentEditId = null;
+
+    function loadMessages() {
+      fetch('/api/messages')
+        .then(response => response.json())
+        .then(messages => {
+          const messageList = document.getElementById('messageList');
+          messageList.innerHTML = '';
+          if (messages.length === 0) {
+            messageList.innerHTML = '<li>No messages yet.</li>';
+          } else {
+            messages.forEach(message => {
+              const date = new Date(message.timestamp).toLocaleString('en-US', {
+                year: 'numeric', month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit', hour12: true
+              }) + ' EAT';
+              const author = message.author || 'Anonymous';
+              const li = document.createElement('li');
+              li.innerHTML = `<span class="message-header">From: ${author}</span><br>${message.text}<br><span class="message-time">Posted on: ${date}</span>`;
+              if (message.image) {
+                li.innerHTML += `<br><img src="${message.image}" alt="Guest image" style="max-width: 100px; border-radius: 50%;">`;
+              }
+              const deleteBtn = document.createElement('button');
+              deleteBtn.textContent = 'Delete';
+              deleteBtn.className = 'delete-btn';
+              deleteBtn.onclick = () => deleteMessage(message._id.toString());
+              li.appendChild(deleteBtn);
+
+              const editBtn = document.createElement('button');
+              editBtn.textContent = 'Edit';
+              editBtn.className = 'edit-btn';
+              editBtn.onclick = () => editMessage(message);
+              li.appendChild(editBtn);
+
+              messageList.appendChild(li);
+            });
+          }
+        })
+        .catch(err => console.error('Error fetching messages:', err));
+    }
+
+    async function deleteMessage(id) {
+      if (confirm('Are you sure you want to delete this message?')) {
+        const response = await fetch(`/api/messages/${id}`, {
+          method: 'DELETE'
+        });
+        if (response.ok) {
+          alert('Message deleted successfully!');
+          loadMessages();
+        } else {
+          alert('Failed to delete message.');
+          console.error('Error:', await response.json());
+        }
+      }
+    }
+
+    function editMessage(message) {
+      currentEditId = message._id.toString();
+      document.getElementById('editMessageInput').value = message.text;
+      document.getElementById('editAuthorInput').value = message.author || '';
+      const editPreview = document.getElementById('editImagePreview');
+      if (message.image) {
+        editPreview.src = message.image;
+        editPreview.style.display = 'block';
+      } else {
+        editPreview.style.display = 'none';
+      }
+      document.getElementById('editModal').classList.add('active');
+      document.getElementById('overlay').classList.add('active');
+    }
+
+    document.getElementById('cancelEdit').addEventListener('click', () => {
+      document.getElementById('editModal').classList.remove('active');
+      document.getElementById('overlay').classList.remove('active');
+      document.getElementById('editImageInput').value = '';
+      document.getElementById('editImagePreview').style.display = 'none';
+    });
+
+    document.getElementById('editForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = document.getElementById('editMessageInput').value.trim();
+      const author = document.getElementById('editAuthorInput').value.trim();
+      if (!text || !author) {
+        alert('Please enter both a message and your name.');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('text', text);
+      formData.append('author', author);
+      const fileInput = document.getElementById('editImageInput');
+      if (fileInput.files[0]) {
+        formData.append('image', fileInput.files[0]);
+      } else {
+        formData.append('image', document.getElementById('editImagePreview').src.split('/').pop()); // Keep old image
+      }
+
+      const response = await fetch(`/api/messages/${currentEditId}`, {
+        method: 'PUT',
+        body: formData
+      });
+
+      if (response.ok) {
+        alert('Message updated successfully!');
+        document.getElementById('editModal').classList.remove('active');
+        document.getElementById('overlay').classList.remove('active');
+        document.getElementById('editImageInput').value = '';
+        document.getElementById('editImagePreview').style.display = 'none';
+        loadMessages();
+      } else {
+        alert('Failed to update message. Check the console for details.');
+        console.error('Error:', await response.json());
+      }
+    });
+
+    document.getElementById('messageForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = document.getElementById('messageInput').value.trim();
+      const author = document.getElementById('authorInput').value.trim();
+      if (!text || !author) {
+        alert('Please enter both a message and your name.');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('text', text);
+      formData.append('author', author);
+      const fileInput = document.getElementById('imageInput');
+      if (fileInput.files[0]) {
+        formData.append('image', fileInput.files[0]);
+      }
+
+      const response = await fetch('/api/messages', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (response.ok) {
+        alert('Message added successfully!');
+        document.getElementById('messageInput').value = '';
+        document.getElementById('authorInput').value = '';
+        document.getElementById('imageInput').value = '';
+        document.getElementById('imagePreview').style.display = 'none';
+        loadMessages();
+      } else {
+        alert('Failed to add message. Check the console for details.');
+        console.error('Error:', await response.json());
+      }
+    });
+
+    window.onload = loadMessages;
+  </script>
+</body>
+</html>
