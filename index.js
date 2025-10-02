@@ -12,9 +12,8 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// Multer with memory storage for Render
-const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+// Disable file uploads for now
+const upload = multer(); // No storage, just process form data
 
 // MongoDB Atlas connection
 const url = process.env.MONGO_URI || 'mongodb+srv://josephhullo_db_user:<your_actual_password>@cluster0.rw6gtlj.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
@@ -28,7 +27,6 @@ MongoClient.connect(url, { useNewUrlParser: true, useUnifiedTopology: true })
   })
   .catch(err => {
     console.error('❌ MongoDB Connection Error:', err.message, err.stack);
-    // Keep the process running to log further errors
   });
 
 // Default route
@@ -37,19 +35,18 @@ app.get('/', (req, res) => {
 });
 
 // POST - Add a message
-app.post('/api/messages', upload.single('image'), async (req, res) => {
+app.post('/api/messages', upload.none(), async (req, res) => {
   try {
-    console.log('Request body:', req.body, 'File:', req.file);
+    console.log('Request body:', req.body);
     if (!db) throw new Error('Database connection not established');
     const { text, author } = req.body;
     const timestamp = new Date().toISOString();
-    let image = req.file ? `${Date.now()}-${req.file.originalname}` : null;
 
     if (!text || !author) {
       return res.status(400).json({ error: 'Text and author are required' });
     }
 
-    const message = { text, author, timestamp, image };
+    const message = { text, author, timestamp };
     const result = await db.collection('messages').insertOne(message);
     console.log('Message inserted:', result);
     res.status(201).json(result);
@@ -91,7 +88,7 @@ app.delete('/api/messages/:id', async (req, res) => {
 });
 
 // PUT - Update a message
-app.put('/api/messages/:id', upload.single('image'), async (req, res) => {
+app.put('/api/messages/:id', upload.none(), async (req, res) => {
   try {
     const { id } = req.params;
     if (!ObjectId.isValid(id)) {
@@ -100,15 +97,12 @@ app.put('/api/messages/:id', upload.single('image'), async (req, res) => {
     if (!db) throw new Error('Database connection not established');
     const { text, author } = req.body;
     const timestamp = new Date().toISOString();
-    let image = req.file ? `${Date.now()}-${req.file.originalname}` : req.body.image;
 
     if (!text || !author) {
       return res.status(400).json({ error: 'Text and author are required' });
     }
 
     const updateData = { text, author, timestamp };
-    if (image) updateData.image = image;
-
     const result = await db.collection('messages').updateOne(
       { _id: new ObjectId(id) },
       { $set: updateData }
